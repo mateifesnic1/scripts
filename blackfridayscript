@@ -1,0 +1,91 @@
+var url='YOUR_URL';
+var sheet=SpreadsheetApp.openByUrl(url).getActiveSheet();
+var TARGET_AVERAGE_POSITION = 3;
+var TOLERANCE = 0.1;
+var BID_ADJUSTMENT_COEFFICIENT = 1.05;
+function main() {
+  var check=0;
+  if(sheet.getRange("C4").isBlank())
+  {
+  check=1;
+  }
+  manageKeywordBids(check);
+}
+function manageKeywordBids(check) {
+  var kws=[];
+  var kw2=[];
+  if(check==1)
+  {
+  for(var it=5;it<=sheet.getLastRow();it++)
+  {
+    kw2.push([sheet.getRange(it,1).getValue(),sheet.getRange(it,2).getValue()]);
+  }
+  }
+  var keywordsToRaise = AdWordsApp.keywords()
+    .withCondition('Status = ENABLED')
+    .withCondition('AveragePosition > ' + (TARGET_AVERAGE_POSITION + TOLERANCE))
+    .orderBy('AveragePosition ASC')
+    .forDateRange('TODAY')
+    .get();
+  
+  while (keywordsToRaise.hasNext()) {
+    var keyword = keywordsToRaise.next();
+    var vectkw=[keyword.getId().toString(),keyword.getStatsFor("TODAY").getAveragePosition()];
+    kws.push([keyword.getId().toString(),keyword.getStatsFor("TODAY").getAveragePosition()]);
+    if(check==0)
+    {
+      keyword.setMaxCpc(keyword.getMaxCpc() * BID_ADJUSTMENT_COEFFICIENT);
+    }
+    else
+    {
+    var verifier1=0;
+    var verifier2=0;
+    if(keyword.getStatsFor("TODAY").getAveragePosition()<6)
+    {
+    for(var it=0;it<kw2.length;it++)
+    {
+      if(kw2[it][0]==vectkw[0])
+      {
+        verifier1=1;
+        var diferenta=vectkw[1]-kw2[it][1];
+        if(diferenta>=0)
+        {
+          verifier2=1;
+          keyword.setMaxCpc(keyword.getMaxCpc() / (BID_ADJUSTMENT_COEFFICIENT*2));
+        }
+      }
+    }
+    }
+    if(verifier2!=1)
+    {
+      keyword.setMaxCpc(keyword.getMaxCpc() * BID_ADJUSTMENT_COEFFICIENT);
+    }
+    }
+  }
+  var keywordsToLower = AdWordsApp.keywords()
+    .withCondition('AveragePosition < ' + (TARGET_AVERAGE_POSITION - TOLERANCE))
+    .withCondition('Status = ENABLED')
+    .orderBy('AveragePosition DESC')
+    .forDateRange('TODAY')
+    .get();
+
+  while (keywordsToLower.hasNext()) {
+    var keyword = keywordsToLower.next();
+    kws.push([keyword.getId().toString(),keyword.getStatsFor("TODAY").getAveragePosition()]);
+    keyword.setMaxCpc(keyword.getMaxCpc() / BID_ADJUSTMENT_COEFFICIENT);
+  }
+  if(check==1)
+  {
+  sheet.getRange(5,1,sheet.getLastRow()-4,2).clear();
+  }
+    else{
+      sheet.getRange("C4").clear();
+    }
+  for(var it=0;it<kws.length;it++)
+  {
+    var row=it+5;
+    sheet.getRange(row,1).setValue(kws[it][0]);
+    sheet.getRange(row,2).setValue(kws[it][1]);
+  }
+}
+
